@@ -46,6 +46,8 @@
     "postgres": {
       "command": "uvx",
       "args": [
+        "--overrides",
+        ".agents/postgres-mcp-overrides.txt",
         "--from",
         "postgres-mcp==0.3.0",
         "postgres-mcp",

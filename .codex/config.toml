@@ -113,7 +113,7 @@ args = ["-y", "chrome-devtools-mcp@1.12.0", "--headless"]
 
 [mcp_servers.postgres]
 command = "uvx"
-args = ["--from", "postgres-mcp==0.3.0", "postgres-mcp", "--access-mode=restricted"]
+args = ["--overrides", ".agents/postgres-mcp-overrides.txt", "--from", "postgres-mcp==0.3.0", "postgres-mcp", "--access-mode=restricted"]
 env_vars = ["DATABASE_URI"]
 
 [mcp_servers.vercel]
