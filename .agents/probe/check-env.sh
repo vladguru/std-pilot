@@ -3,6 +3,7 @@
 set -u
 echo "== пользователь: $(id -un) (uid $(id -u))"
 echo "== система: $(. /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-неизвестно}")"
+echo "== журнал скрипта установки (последние строки)"; tail -15 /tmp/std-cloud-setup.log 2>/dev/null || echo "журнала нет"
 echo "== версии инструментов"
 for tool in node npm npx uv uvx go python3 git gh psql; do
   if command -v "$tool" >/dev/null 2>&1; then echo "$tool: $("$tool" --version 2>&1 | head -1)"; else echo "$tool: НЕТ"; fi
