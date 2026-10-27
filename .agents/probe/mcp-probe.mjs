@@ -9,7 +9,8 @@ const results = [];
 
 function probe(name, cfg) {
   return new Promise(resolve => {
-    const env = { ...process.env, DATABASE_URI: process.env.DATABASE_URI ?? 'postgresql://postgres:std-probe@localhost:5432/postgres' };
+    // Домашний каталог в песочнице Codex доступен только для чтения: кэши переносим в /tmp.
+    const env = { ...process.env, UV_CACHE_DIR: '/tmp/std-probe/uv', npm_config_cache: '/tmp/std-probe/npm', XDG_CACHE_HOME: '/tmp/std-probe/xdg', DATABASE_URI: process.env.DATABASE_URI ?? 'postgresql://postgres:std-probe@localhost:5432/postgres' };
     const child = spawn(cfg.command, cfg.args ?? [], { env, stdio: ['pipe', 'pipe', 'pipe'] });
     let out = '', err = '', done = false;
     const finish = (status, detail) => {
