@@ -3,7 +3,10 @@
 set -u
 echo "== пользователь: $(id -un) (uid $(id -u))"
 echo "== система: $(. /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-неизвестно}")"
-echo "== журнал cloud-setup:"; cat /tmp/std-cloud-setup.log 2>/dev/null || echo "нет /tmp/std-cloud-setup.log (скрипт установки не выполнялся в этой среде или журнал не сохранился)"
+echo "== версии инструментов"
+for tool in node npm npx uv uvx go python3 git gh psql; do
+  if command -v "$tool" >/dev/null 2>&1; then echo "$tool: $("$tool" --version 2>&1 | head -1)"; else echo "$tool: НЕТ"; fi
+done
 echo "== запуск PostgreSQL"
 SUDO=""; [ "$(id -u)" != "0" ] && command -v sudo >/dev/null 2>&1 && SUDO="sudo"
 if command -v pg_lsclusters >/dev/null 2>&1; then
