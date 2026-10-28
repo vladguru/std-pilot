@@ -11,6 +11,8 @@ STACKS :=
 -include make/*.mk
 
 STD := node scripts/std
+# Правило semgrep требует выдержки новых версий 7 суток; в шаблоне закреплены свежие версии, выдержка — сутки (Р-67).
+SEMGREP_SKIP := --exclude-rule package_managers.pnpm.pnpm-missing-minimum-release-age.pnpm-minimum-release-age
 COMPOSE := docker compose -f deploy/docker-compose.yml
 # Выполнить команду инструмента; если инструмента нет, в CI это ошибка, локально — предупреждение.
 define tool
@@ -63,7 +65,7 @@ security: security-base $(addprefix security-,$(STACKS)) ## Секреты, уя
 security-base:
 	$(call tool,gitleaks,gitleaks git --no-banner --redact)
 	$(call tool,osv-scanner,osv-scanner scan source --recursive .)
-	$(call tool,uvx,uvx --python 3.13 --from semgrep==1.182.0 semgrep scan --config p/default --metrics off --error --quiet .)
+	$(call tool,uvx,uvx --python 3.13 --from semgrep==1.182.0 semgrep scan --config p/default --metrics off --error --quiet $(SEMGREP_SKIP) .)
 	$(call tool,actionlint,actionlint)
 	$(call tool,hadolint,find . -name Dockerfile -not -path '*/node_modules/*' -print0 | xargs -0 -r hadolint)
 
