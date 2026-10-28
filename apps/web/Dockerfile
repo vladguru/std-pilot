@@ -14,6 +14,6 @@ WORKDIR /app
 ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
 COPY --from=build /repo/apps/web/.next/standalone ./
 COPY --from=build /repo/apps/web/.next/static ./apps/web/.next/static
-USER node
+USER 1000:1000
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]
