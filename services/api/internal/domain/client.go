@@ -36,3 +36,5 @@ func NewClient(name string) (Client, error) {
 
 // Name возвращает имя клиента.
 func (c Client) Name() string { return c.name }
+
+// Дополнительное пояснение.
