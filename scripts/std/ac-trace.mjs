@@ -27,14 +27,16 @@ export function parseSpec(specMd) {
   return { status: { agreed: Boolean(agreed), date: agreed ? agreed[1] : null }, criteria };
 }
 
-/** Lines of files that name the criterion: AC-01, AC_01, AC01, TestAC01_x, case-insensitive; AC-1 is not AC-12. */
+// Identifier with the number in any spelling: AC-01, AC_01, AC01, TestAC01_x, test_ac_01; the number is compared as a value.
+const AC_MENTION = /(?:(?<![A-Za-z0-9])|(?<=Test)|(?<=test_)|(?<=test))AC[-_ ]?(\d+)(?!\d)/gi;
+
+/** Lines of files that name the criterion: AC-1 and AC-01 are one criterion, AC-1 is not AC-12. */
 export function findTests(files, id) {
   const number = Number(/\d+/.exec(id)[0]);
-  const re = new RegExp(`(?:(?<![A-Za-z0-9])|(?<=Test)|(?<=test_)|(?<=test))AC[-_ ]?0*${number}(?!\\d)`, 'i');
   const found = [];
   for (const file of files) {
     file.text.split('\n').forEach((line, i) => {
-      if (re.test(line)) found.push({ path: file.path, line: i + 1 });
+      if ([...line.matchAll(AC_MENTION)].some(m => Number(m[1]) === number)) found.push({ path: file.path, line: i + 1 });
     });
   }
   return found;

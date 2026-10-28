@@ -24,9 +24,10 @@ export function extractBlocks(markdown) {
   return blocks;
 }
 
+// Command and leading arguments of mermaid-cli: an installed mmdc or the pinned package through npx.
 function renderer() {
-  if (spawnSync('mmdc', ['--version'], { shell: true, stdio: 'ignore' }).status === 0) return 'mmdc';
-  return `npx --yes ${MERMAID_CLI}`;
+  if (spawnSync('mmdc', ['--version'], { stdio: 'ignore' }).status === 0) return ['mmdc'];
+  return ['npx', '--yes', MERMAID_CLI];
 }
 
 function main(argv) {
@@ -52,7 +53,8 @@ function main(argv) {
     found.filter(b => b.code !== null).forEach((b, i) => {
       const input = join(dir, `d${i}.mmd`);
       writeFileSync(input, b.code);
-      const r = spawnSync(`${cli} -p "${config}" -i "${input}" -o "${join(dir, `d${i}.svg`)}" --quiet`, { shell: true, encoding: 'utf8' });
+      const [command, ...prefix] = cli;
+      const r = spawnSync(command, [...prefix, '-p', config, '-i', input, '-o', join(dir, `d${i}.svg`), '--quiet'], { encoding: 'utf8' });
       if (r.status !== 0) problems.push(`${b.path}:${b.line}: схема не собирается: ${(r.stderr || r.stdout).trim().split('\n').slice(0, 3).join(' | ')}`);
     });
   } finally {

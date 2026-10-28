@@ -45,8 +45,9 @@ export function check({ root = '.', base, head = 'HEAD', command }) {
       problems.push(`есть автоматически формируемые файлы (${generated.join(', ')}), но нет цели docs-generate в Makefile: нечем проверить их повторным формированием`);
     } else {
       const before = new Map(generated.map(p => [p, hash(readText(join(root, p)) ?? '')]));
-      const run = spawnSync(cmd, { cwd: root, shell: true, encoding: 'utf8' });
-      if (run.status !== 0) problems.push(`команда «${cmd}» завершилась с кодом ${run.status}: ${(run.stderr || run.stdout).trim().slice(0, 300)}`);
+      const [file, ...args] = cmd.trim().split(/\s+/);
+      const run = spawnSync(file, args, { cwd: root, encoding: 'utf8' });
+      if (run.status !== 0) problems.push(`команда «${cmd}» завершилась с кодом ${run.status ?? run.error?.code}: ${(run.stderr || run.stdout).trim().slice(0, 300)}`);
       else {
         for (const p of generated) {
           if (hash(readText(join(root, p)) ?? '') !== before.get(p)) {
