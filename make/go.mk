@@ -27,7 +27,7 @@ build-go:
 
 security-go:
 	cd $(GO_DIR) && go run $(GOVULNCHECK) ./...
-	cd $(GO_DIR) && go run $(GO_LICENSES) check ./... --disallowed_types=forbidden,restricted
+	cd $(GO_DIR) && go run $(GO_LICENSES) check ./... --disallowed_types=forbidden,restricted --ignore $$(go list -m)
 
 nightly-go:
 	cd $(GO_DIR) && go run $(GREMLINS) unleash --threshold-efficacy $(MUTATION_MIN)
