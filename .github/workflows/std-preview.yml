@@ -1,0 +1,28 @@
+# Дымовой тест превью (спека, п. 7): после каждого успешного развёртывания превью (Vercel, Render) проверяются
+# /healthz и /readyz. Файл принадлежит стандарту.
+name: Дымовой тест превью
+
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Дымовой тест
+    if: github.event.deployment_status.state == 'success' && github.event.deployment_status.environment_url != ''
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: scripts/std
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      # Адрес передаётся через окружение, а не подстановкой в команду.
+      - run: node scripts/std/smoke.mjs "$PREVIEW_URL"
+        env:
+          PREVIEW_URL: ${{ github.event.deployment_status.environment_url }}

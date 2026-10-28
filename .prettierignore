@@ -1,0 +1,11 @@
+node_modules
+.next
+coverage
+reports
+pnpm-lock.yaml
+playwright-report
+test-results
+.agents
+.claude
+docs
+*.md

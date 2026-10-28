@@ -1,0 +1,120 @@
+# Проверки каждого PR (спека, п. 7). Файл принадлежит стандарту: sync возвращает его к версии стандарта,
+# изменение — изменение ограничителя (только с одобрения владельца). Свои проверки проекта — в отдельных файлах.
+#
+# Исполнитель: переменная репозитория CI_RUNNER. Не задана — собственный исполнитель (["self-hosted"]);
+# для резерва на облачных исполнителях GitHub задайте "ubuntu-24.04" (параметр профиля «Исполнитель CI»).
+name: CI
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  MISE_YES: "1"
+  DO_NOT_TRACK: "1"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  checks:
+    name: Проверка
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+      - run: make deps
+      - run: make ci
+
+  guard:
+    name: Ограничители и документы
+    if: github.event_name == 'pull_request'
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # Проверки запускаются из основной ветки: PR не может ослабить сами проверки.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.base_ref }}
+          path: .std-base
+          sparse-checkout: scripts/std
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Защита ограничителей
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -f .std-base/scripts/std/guard.mjs ]; then
+            node .std-base/scripts/std/guard.mjs --base "origin/$BASE_REF"
+          else
+            echo "В основной ветке нет scripts/std: проверка пропущена"
+          fi
+      - name: Обязательность документов
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -f .std-base/scripts/std/docs-required.mjs ]; then
+            node .std-base/scripts/std/docs-required.mjs --base "origin/$BASE_REF" --event "$GITHUB_EVENT_PATH"
+          else
+            echo "В основной ветке нет scripts/std: проверка пропущена"
+          fi
+
+  security:
+    name: Безопасность
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+      - run: make deps
+      - run: make security
+
+  docs:
+    name: Документация
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+      - run: make docs
+
+  e2e:
+    name: Сквозные тесты
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Есть ли сквозные тесты
+        id: has
+        run: |
+          if [ -f tests/e2e/playwright.config.ts ]; then echo "found=true" >> "$GITHUB_OUTPUT"; else echo "found=false" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.has.outputs.found == 'true'
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+      - if: steps.has.outputs.found == 'true'
+        run: make deps e2e-deps e2e
+      - if: steps.has.outputs.found == 'true' && failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-report
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore

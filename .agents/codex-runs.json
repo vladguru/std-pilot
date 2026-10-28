@@ -1,0 +1,255 @@
+{
+  "std-accept": {
+    "model": "gpt-6.1-sol",
+    "effort": "medium",
+    "args": [
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=medium"
+    ],
+    "command": "codex exec -m gpt-6.1-sol -c model_reasoning_effort=medium"
+  },
+  "std-architect": {
+    "model": "gpt-6-astra",
+    "effort": "xhigh",
+    "args": [
+      "-m",
+      "gpt-6-astra",
+      "-c",
+      "model_reasoning_effort=xhigh"
+    ],
+    "command": "codex exec -m gpt-6-astra -c model_reasoning_effort=xhigh"
+  },
+  "std-audit": {
+    "model": "gpt-6-astra",
+    "effort": "xhigh",
+    "args": [
+      "-m",
+      "gpt-6-astra",
+      "-c",
+      "model_reasoning_effort=xhigh"
+    ],
+    "command": "codex exec -m gpt-6-astra -c model_reasoning_effort=xhigh"
+  },
+  "std-break": {
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "args": [
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=high"
+    ],
+    "command": "codex exec -m gpt-6.1-sol -c model_reasoning_effort=high"
+  },
+  "std-debug": {
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "args": [
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=high"
+    ],
+    "command": "codex exec -m gpt-6.1-sol -c model_reasoning_effort=high"
+  },
+  "std-debug-heavy": {
+    "model": "gpt-6-astra",
+    "effort": "high",
+    "args": [
+      "-m",
+      "gpt-6-astra",
+      "-c",
+      "model_reasoning_effort=high"
+    ],
+    "command": "codex exec -m gpt-6-astra -c model_reasoning_effort=high"
+  },
+  "std-deploy": {
+    "model": "gpt-6.1-sol",
+    "effort": "medium",
+    "args": [
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=medium"
+    ],
+    "command": "codex exec -m gpt-6.1-sol -c model_reasoning_effort=medium"
+  },
+  "std-design": {
+    "model": "gpt-6-astra",
+    "effort": "high",
+    "args": [
+      "-m",
+      "gpt-6-astra",
+      "-c",
+      "model_reasoning_effort=high"
+    ],
+    "command": "codex exec -m gpt-6-astra -c model_reasoning_effort=high"
+  },
+  "std-discover": {
+    "model": "gpt-6-astra",
+    "effort": "high",
+    "args": [
+      "-m",
+      "gpt-6-astra",
+      "-c",
+      "model_reasoning_effort=high"
+    ],
+    "command": "codex exec -m gpt-6-astra -c model_reasoning_effort=high"
+  },
+  "std-docs": {
+    "model": "gpt-6.1-sol",
+    "effort": "medium",
+    "args": [
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=medium"
+    ],
+    "command": "codex exec -m gpt-6.1-sol -c model_reasoning_effort=medium"
+  },
+  "std-docs-high": {
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "args": [
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=high"
+    ],
+    "command": "codex exec -m gpt-6.1-sol -c model_reasoning_effort=high"
+  },
+  "std-e2e": {
+    "model": "gpt-6.1-sol",
+    "effort": "medium",
+    "args": [
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=medium"
+    ],
+    "command": "codex exec -m gpt-6.1-sol -c model_reasoning_effort=medium"
+  },
+  "std-handoff": {
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "args": [
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=high"
+    ],
+    "command": "codex exec -m gpt-6.1-sol -c model_reasoning_effort=high"
+  },
+  "std-night": {
+    "model": "gpt-6.1-sol",
+    "effort": "medium",
+    "args": [
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=medium"
+    ],
+    "command": "codex exec -m gpt-6.1-sol -c model_reasoning_effort=medium"
+  },
+  "std-plan": {
+    "model": "gpt-6-astra",
+    "effort": "high",
+    "args": [
+      "-m",
+      "gpt-6-astra",
+      "-c",
+      "model_reasoning_effort=high"
+    ],
+    "command": "codex exec -m gpt-6-astra -c model_reasoning_effort=high"
+  },
+  "std-progress": {
+    "model": "gpt-6.1-sol",
+    "effort": "low",
+    "args": [
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=low"
+    ],
+    "command": "codex exec -m gpt-6.1-sol -c model_reasoning_effort=low"
+  },
+  "std-review": {
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "args": [
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=high"
+    ],
+    "command": "codex exec -m gpt-6.1-sol -c model_reasoning_effort=high"
+  },
+  "std-review-gate": {
+    "model": "gpt-6-astra",
+    "effort": "xhigh",
+    "args": [
+      "-m",
+      "gpt-6-astra",
+      "-c",
+      "model_reasoning_effort=xhigh"
+    ],
+    "command": "codex exec -m gpt-6-astra -c model_reasoning_effort=xhigh"
+  },
+  "std-run": {
+    "model": "gpt-6.1-sol",
+    "effort": "medium",
+    "args": [
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=medium"
+    ],
+    "command": "codex exec -m gpt-6.1-sol -c model_reasoning_effort=medium"
+  },
+  "std-security": {
+    "model": "gpt-6-astra",
+    "effort": "xhigh",
+    "args": [
+      "-m",
+      "gpt-6-astra",
+      "-c",
+      "model_reasoning_effort=xhigh"
+    ],
+    "command": "codex exec -m gpt-6-astra -c model_reasoning_effort=xhigh"
+  },
+  "std-spec": {
+    "model": "gpt-6-astra",
+    "effort": "xhigh",
+    "args": [
+      "-m",
+      "gpt-6-astra",
+      "-c",
+      "model_reasoning_effort=xhigh"
+    ],
+    "command": "codex exec -m gpt-6-astra -c model_reasoning_effort=xhigh"
+  },
+  "std-task": {
+    "model": "gpt-6.1-sol",
+    "effort": "medium",
+    "args": [
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=medium"
+    ],
+    "command": "codex exec -m gpt-6.1-sol -c model_reasoning_effort=medium"
+  },
+  "std-task-high": {
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "args": [
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=high"
+    ],
+    "command": "codex exec -m gpt-6.1-sol -c model_reasoning_effort=high"
+  }
+}

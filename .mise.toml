@@ -1,0 +1,23 @@
+# Версии языков и инструментов (mise): одинаковые в облаке, в CI и локально. Файл ведёт агент; версии обновляет Renovate.
+# Установка: mise install
+
+[tools]
+node = "24.22.1"
+uv = "0.13.6"
+lefthook = "2.2.2"
+gitleaks = "8.30.1"
+osv-scanner = "2.7.0"
+hadolint = "2.15.1"
+actionlint = "1.7.12"
+vale = "3.25.1"
+lychee = "0.24.2"
+trivy = "0.76.1"
+syft = "1.55.0"
+go = "1.26.10"
+golangci-lint = "2.15.0"
+pnpm = "12.16.1"
+dbmate = "2.37.0"
+"github:sbdchd/squawk" = "2.70.0"
+
+[settings]
+experimental = true

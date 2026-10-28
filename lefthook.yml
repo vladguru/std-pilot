@@ -1,0 +1,19 @@
+# Проверки перед коммитом (спека, п. 7): форматирование, быстрый линт, поиск секретов. Установка: make hooks.
+# Файл — ограничитель: изменяется с согласия владельца.
+pre-commit:
+  parallel: true
+  commands:
+    secrets:
+      run: gitleaks git --pre-commit --staged --no-banner --redact
+    go:
+      glob: "*.go"
+      run: gofmt -w {staged_files}
+      stage_fixed: true
+    python:
+      glob: "*.py"
+      run: uv run ruff format {staged_files} && uv run ruff check --fix --quiet {staged_files}
+      stage_fixed: true
+    web:
+      glob: "*.{ts,tsx,js,jsx,mjs,json,css}"
+      run: pnpm exec prettier --write --ignore-unknown {staged_files}
+      stage_fixed: true

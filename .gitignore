@@ -1,0 +1,29 @@
+# Файлы с настоящими значениями настроек в репозиторий не добавляются.
+.env
+.env.*
+!.env.example
+
+# Рабочий каталог MCP-сервера Serena создаётся автоматически.
+.serena/
+
+# Рабочий каталог скиллов superpowers (отчёты исполнителей и ревьюеров) в репозиторий не добавляется.
+.superpowers/
+
+# Зависимости и результаты сборки.
+node_modules/
+.next/
+dist/
+build/
+coverage/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mutmut-cache/
+/bin/
+
+# Отчёты тестов и ночных прогонов.
+playwright-report/
+test-results/
+reports/

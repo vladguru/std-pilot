@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - packages/*
+
+# pnpm по умолчанию не запускает скрипты установки зависимостей; разрешены только перечисленные пакеты.
+allowBuilds:
+  unrs-resolver: true
+  sharp: true

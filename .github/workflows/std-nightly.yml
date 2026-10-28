@@ -1,0 +1,44 @@
+# Ночной прогон (спека, п. 7): полный e2e, визуальные тесты, мутационное тестирование, сканирование зависимостей и образов.
+# Запускается по расписанию (время UTC; расписание по часовому поясу профиля задаёт sync --github), для кандидата rc-N и вручную.
+# Файл принадлежит стандарту.
+name: Ночной прогон
+
+on:
+  schedule:
+    - cron: "0 22 * * *"
+  push:
+    tags: ["rc-*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CI: "true"
+  MISE_YES: "1"
+  DO_NOT_TRACK: "1"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  nightly:
+    name: Ночной прогон
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+      - run: make deps e2e-deps
+      - run: make nightly
+      - name: Проверка внешних ссылок
+        run: lychee --no-progress --config .lychee.toml '**/*.md'
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nightly-reports
+          path: |
+            reports
+            playwright-report
+            test-results
+          if-no-files-found: ignore

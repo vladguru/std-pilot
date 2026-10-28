@@ -1,0 +1,7 @@
+# Проверка ссылок в Markdown (lychee). В каждом PR проверяются локальные ссылки (--offline);
+# внешние адреса проверяет ночной прогон: lychee --config .lychee.toml '**/*.md'.
+exclude_path = ["node_modules", "vendor", ".agents", ".claude", ".superpowers"]
+exclude = ["^https?://localhost", "^https?://127\\.0\\.0\\.1", "^mailto:"]
+accept = [200, 206, 429]
+max_retries = 2
+timeout = 20

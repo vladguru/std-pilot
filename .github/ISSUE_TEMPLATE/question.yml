@@ -1,0 +1,34 @@
+name: Вопрос владельцу
+description: Вопрос по бизнесу или безопасности (скилл std-ask)
+title: "В-NN. Суть вопроса одной фразой"
+labels: ["нужен-ответ"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Описание
+      description: Одна-две фразы деловым языком, без жаргона.
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Варианты
+      description: От двух до четырёх вариантов с буквами. Первый — рекомендуемый, с пометкой «(рекомендую)». Для каждого — последствие.
+      placeholder: |
+        А. … (рекомендую) — последствие: …
+        Б. … — последствие: …
+    validations:
+      required: true
+  - type: textarea
+    id: default
+    attributes:
+      label: Умолчание
+      description: Что агент сделает, пока ответа нет. Без умолчания допускаются только вопросы по бизнес-требованиям и безопасности; задание получает метку «стоп».
+    validations:
+      required: true
+  - type: textarea
+    id: links
+    attributes:
+      label: Ссылки
+      description: Задание и PR, ожидающие ответа.
