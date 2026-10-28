@@ -6,3 +6,7 @@ packages:
 allowBuilds:
   unrs-resolver: true
   sharp: true
+
+# Исправленные версии транзитивных зависимостей с известными уязвимостями (osv-scanner, 28.10.2026).
+overrides:
+  qs: ">=6.16.1"
