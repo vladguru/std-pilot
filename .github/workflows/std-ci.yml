@@ -1,8 +1,10 @@
 # Проверки каждого PR (спека, п. 7). Файл принадлежит стандарту: sync возвращает его к версии стандарта,
 # изменение — изменение ограничителя (только с одобрения владельца). Свои проверки проекта — в отдельных файлах.
 #
-# Исполнитель: переменная репозитория CI_RUNNER. Не задана — собственный исполнитель (["self-hosted"]);
-# для резерва на облачных исполнителях GitHub задайте "ubuntu-24.04" (параметр профиля «Исполнитель CI»).
+# Исполнитель: переменная репозитория CI_RUNNER. Не задана — облачный исполнитель GitHub ("ubuntu-24.04"): это безопасно
+# и для публичных репозиториев, где PR из форка не должен исполнять код на компьютере владельца. Собственный исполнитель
+# (["self-hosted"], параметр профиля «Исполнитель CI») допустим только в приватном репозитории; sync --github в публичном
+# репозитории всегда задаёт облачный.
 name: CI
 
 on:
@@ -28,7 +30,7 @@ env:
 jobs:
   checks:
     name: Проверка
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '["self-hosted"]') }}
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -39,7 +41,7 @@ jobs:
   guard:
     name: Ограничители и документы
     if: github.event_name == 'pull_request'
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '["self-hosted"]') }}
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
     timeout-minutes: 10
     permissions:
       contents: read
@@ -80,7 +82,7 @@ jobs:
 
   security:
     name: Безопасность
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '["self-hosted"]') }}
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -92,7 +94,7 @@ jobs:
 
   docs:
     name: Документация
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '["self-hosted"]') }}
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -101,7 +103,7 @@ jobs:
 
   e2e:
     name: Сквозные тесты
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '["self-hosted"]') }}
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

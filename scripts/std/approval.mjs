@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 // Check of the owner's approval (spec 2 "Порядок согласования"). Runs from main, never from the PR code:
-// the owner's account is read from AGENTS.md of main, so a PR cannot replace it.
+// the accounts of the owner and of the agent are read from AGENTS.md of main, so a PR cannot replace them.
+// Strict mode (the agent has a separate account): a PR created by the owner cannot be approved, and nothing of the agent counts.
+// Without an agent account the old behaviour stays: only the mark `<!-- agent -->` separates the agent from the owner.
 // Usage (CI): node scripts/std/approval.mjs [--post-status]   — env GITHUB_REPOSITORY, GITHUB_TOKEN, GITHUB_EVENT_PATH
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
-import { AGENT_MARK, isMain, LABEL_APPROVAL, ownerFromAgentsMd, parseDiff, RESTRICTOR_PATHS } from './common.mjs';
+import { AGENT_MARK, agentFromAgentsMd, isMain, LABEL_APPROVAL, ownerFromAgentsMd, parseDiff, RESTRICTOR_PATHS } from './common.mjs';
 import { analyze } from './guard.mjs';
 
 export const STATUS_CONTEXT = 'std/согласование';
@@ -43,22 +45,23 @@ function approvalReasons({ labels, files, changedFiles }) {
 }
 
 const sameLogin = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
-const byOwner = (item, owner) => sameLogin(item.user?.login, owner) && !(item.body ?? '').includes(AGENT_MARK);
+// The mark is an extra guard, not the border: in strict mode the account of the agent never counts, mark or not.
+const byOwner = (item, owner, agent) => sameLogin(item.user?.login, owner) && !(agent && sameLogin(item.user?.login, agent)) && !(item.body ?? '').includes(AGENT_MARK);
 
 /**
  * The latest decision of the owner decides. A review APPROVED counts on the current head only; a comment «согласовано»
  * counts after the last commit (the later of the commit dates and the time GitHub first saw the head). Without the time
  * GitHub saw the head a comment does not count: commit dates alone can be forged.
  */
-export function ownerApproval({ owner, headSha, reviews, comments, commits, suites = [] }) {
+export function ownerApproval({ owner, agent = null, headSha, reviews, comments, commits, suites = [] }) {
   const headSeen = suites.map(s => s.created_at).filter(Boolean).sort()[0];
   const lastCommit = [...commits.flatMap(c => [c.commit?.committer?.date, c.commit?.author?.date]), headSeen].filter(Boolean).sort().at(-1) ?? '';
   const events = [];
-  for (const r of reviews.filter(r => byOwner(r, owner))) {
+  for (const r of reviews.filter(r => byOwner(r, owner, agent))) {
     if (r.state === 'APPROVED' && r.commit_id === headSha) events.push({ at: r.submitted_at, ok: true, how: 'ревью APPROVED на текущем коммите' });
     else if (r.state === 'CHANGES_REQUESTED' || r.state === 'DISMISSED') events.push({ at: r.submitted_at, ok: false });
   }
-  for (const c of comments.filter(c => byOwner(c, owner))) {
+  for (const c of comments.filter(c => byOwner(c, owner, agent))) {
     const body = (c.body ?? '').toLowerCase();
     if (REJECT_COMMENT.test(body)) events.push({ at: c.created_at, ok: false });
     else if (APPROVE_COMMENT.test(body) && headSeen && c.created_at > lastCommit) events.push({ at: c.created_at, ok: true, how: 'комментарий «согласовано» после последнего коммита' });
@@ -69,13 +72,18 @@ export function ownerApproval({ owner, headSha, reviews, comments, commits, suit
 }
 
 /** @returns {{ required: boolean, approved: boolean, ok: boolean, reason: string }} */
-export function evaluate({ labels, headSha, owner, reviews, comments, commits, suites = [], files, changedFiles }) {
+export function evaluate({ labels, headSha, owner, agent = null, author, reviews, comments, commits, suites = [], files, changedFiles }) {
   const reasons = approvalReasons({ labels, files, changedFiles });
   const required = reasons.length > 0;
   if (!required) return { required, approved: false, ok: true, reason: 'согласование не требуется' };
   if (!owner) return { required, approved: false, ok: false, reason: 'в профиле AGENTS.md ветки main не задана «Учётная запись владельца»: одобрение принять нельзя' };
+  if (agent) {
+    if (sameLogin(agent, owner)) return { required, approved: false, ok: false, reason: 'в профиле AGENTS.md ветки main «Учётная запись агента» совпадает с владельцем: отдельная учётная запись агента обязательна, одобрение принять нельзя' };
+    if (!author) return { required, approved: false, ok: false, reason: 'автор PR не определён: одобрение недоступно' };
+    if (sameLogin(author, owner)) return { required, approved: false, ok: false, reason: 'PR создан владельцем: одобрение недоступно, PR создаёт учётная запись агента' };
+  }
   const needsLabel = !labels.includes(LABEL_APPROVAL);
-  const how = ownerApproval({ owner, headSha, reviews, comments, commits, suites });
+  const how = ownerApproval({ owner, agent, headSha, reviews, comments, commits, suites });
   const list = reasons.slice(0, 5).join('; ');
   // Без наборов проверок неизвестно, когда GitHub увидел коммит, и комментарий не принимается: подсказываем причину.
   const hint = suites.length === 0 ? '; время появления коммита на GitHub не получено — проверьте право checks: read у рабочего процесса' : '';
@@ -105,33 +113,39 @@ export async function listAll(api, path) {
   }
 }
 
-export async function ownerFromMain(api, repo) {
+/** The owner and the agent accounts from the profile of AGENTS.md in main (one request). */
+export async function accountsFromMain(api, repo) {
   const file = await api(`repos/${repo}/contents/AGENTS.md?ref=refs/heads/main`);
-  return ownerFromAgentsMd(Buffer.from(file.content, 'base64').toString('utf8'));
+  const text = Buffer.from(file.content, 'base64').toString('utf8');
+  return { owner: ownerFromAgentsMd(text), agent: agentFromAgentsMd(text) };
+}
+
+export async function ownerFromMain(api, repo) {
+  return (await accountsFromMain(api, repo)).owner;
 }
 
 async function load(api, repo, number) {
   const pr = await api(`repos/${repo}/pulls/${number}`);
-  const [owner, files, reviews, commits, comments, suites] = await Promise.all([
-    ownerFromMain(api, repo),
+  const [accounts, files, reviews, commits, comments, suites] = await Promise.all([
+    accountsFromMain(api, repo),
     listAll(api, `repos/${repo}/pulls/${number}/files`),
     listAll(api, `repos/${repo}/pulls/${number}/reviews`),
     listAll(api, `repos/${repo}/pulls/${number}/commits`),
     listAll(api, `repos/${repo}/issues/${number}/comments`),
     api(`repos/${repo}/commits/${pr.head.sha}/check-suites`).then(r => r.check_suites ?? [], () => []),
   ]);
-  return { pr, owner, files, reviews, commits, comments, suites };
+  return { pr, owner: accounts.owner, agent: accounts.agent, files, reviews, commits, comments, suites };
 }
 
 /** Loads the PR from GitHub and evaluates it; with postStatus publishes the commit status `std/согласование`. */
 export async function run({ api, repo, number, postStatus = false }) {
-  const { pr, owner, files, reviews, commits, comments, suites } = await load(api, repo, number);
+  const { pr, owner, agent, files, reviews, commits, comments, suites } = await load(api, repo, number);
   // Список файлов PR строится относительно его базы: при базе, отличной от основной ветки, он скрывает изменения ограничителей.
   const defaultBranch = pr.base?.repo?.default_branch;
   const baseOk = !defaultBranch || pr.base?.ref === defaultBranch;
   const result = !baseOk
     ? { required: true, approved: false, ok: false, reason: `PR направлен в ветку «${pr.base.ref}», а не в основную «${defaultBranch}»: согласование действует только для PR в основную ветку` }
-    : evaluate({ labels: pr.labels.map(l => l.name), headSha: pr.head.sha, owner, reviews, comments, commits, suites, files: filesFromApi(files), changedFiles: pr.changed_files });
+    : evaluate({ labels: pr.labels.map(l => l.name), headSha: pr.head.sha, owner, agent, author: pr.user?.login, reviews, comments, commits, suites, files: filesFromApi(files), changedFiles: pr.changed_files });
   if (postStatus) {
     await api(`repos/${repo}/statuses/${pr.head.sha}`, { method: 'POST', body: { state: result.ok ? 'success' : 'failure', context: STATUS_CONTEXT, description: result.reason.slice(0, 140) } });
   }

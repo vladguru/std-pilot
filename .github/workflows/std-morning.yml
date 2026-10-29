@@ -28,7 +28,7 @@ concurrency:
 jobs:
   summary:
     name: Утренняя сводка
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '["self-hosted"]') }}
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -42,3 +42,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           STD_MORNING_FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
+          # Дата окончания ограничения взаимодействия публичного репозитория (её задаёт sync --github); в приватном пусто.
+          INTERACTION_LIMIT_UNTIL: ${{ vars.STD_INTERACTION_LIMIT_UNTIL }}

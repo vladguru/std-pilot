@@ -5,7 +5,8 @@
 // агент и владелец работают под одной учётной записью (собственные комментарии не уведомляют).
 // Из issue и комментариев берутся только номера, заголовки и ссылки; заголовки усекаются и экранируются. Код веток PR не читается.
 // Usage (CI): node scripts/std/morning-summary.mjs [--dry-run] [--force] [--now <ISO>]
-//   env GITHUB_REPOSITORY, GITHUB_TOKEN, GITHUB_API_URL (по умолчанию https://api.github.com), STD_MORNING_FORCE=1
+//   env GITHUB_REPOSITORY, GITHUB_TOKEN, GITHUB_API_URL (по умолчанию https://api.github.com), STD_MORNING_FORCE=1,
+//   INTERACTION_LIMIT_UNTIL (ГГГГ-ММ-ДД: конец ограничения взаимодействия в публичном репозитории; пусто — предупреждения нет)
 import { parseArgs } from 'node:util';
 import { listAll, makeApi, STATUS_CONTEXT } from './approval.mjs';
 import { isMain, isTimeZone, normalizeTime, parseNightShift } from './common.mjs';
@@ -19,6 +20,9 @@ const RUN_HOURS = 24;
 const MAX_ITEMS = 15;
 const MAX_TITLE = 100;
 const HOUR = 3600 * 1000;
+const DAY = 24 * HOUR;
+const LIMIT_WARN_DAYS = 30;
+const LIMIT_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const WORKFLOWS = [['std-nightly', 'Ночной прогон'], ['std-ci', 'CI на main']];
 const RUN_STATES = { success: 'успешно', failure: 'ошибка', cancelled: 'отменён', timed_out: 'превышено время', skipped: 'пропущен', action_required: 'требует действия' };
 const APPROVAL = { success: 'пройдено', failure: 'ожидает одобрения', pending: 'проверяется' };
@@ -95,6 +99,23 @@ function pickNumber(body, label, max) {
   return null;
 }
 
+/**
+ * Warning line when the interaction limit of a public repository ends in less than 30 days (or has ended).
+ * `limitUntil` is "ГГГГ-ММ-ДД" from the repository variable; an empty or malformed value gives no warning.
+ * Days are counted from the local date `localDate` of the profile zone.
+ */
+function limitLine(limitUntil, localDate) {
+  const m = LIMIT_DATE.exec(String(limitUntil ?? '').trim());
+  if (!m) return null;
+  const [y, mo, d] = m.slice(1).map(Number);
+  const until = new Date(Date.UTC(y, mo - 1, d));
+  if (until.getUTCFullYear() !== y || until.getUTCMonth() !== mo - 1 || until.getUTCDate() !== d) return null;
+  const [ly, lm, ld] = localDate.split('-').map(Number);
+  const days = Math.round((until.getTime() - Date.UTC(ly, lm - 1, ld)) / DAY);
+  if (days >= LIMIT_WARN_DAYS) return null;
+  return `- Ограничение взаимодействия в репозитории ${days < 0 ? 'истекло' : 'истекает'} ${m[3]}.${m[2]}.${m[1]}: нужно запустить \`sync --github\` (потребуется токен А)`;
+}
+
 /** Numbers of the usage comment of the night session; free text of the comment never reaches the summary. */
 export function parseUsage(body) {
   if (typeof body !== 'string' || !body.includes(USAGE_MARK)) return null;
@@ -134,14 +155,16 @@ function runLine(label, run, now, tz) {
  * closed PRs (an open PR may carry `approval`: state of the status «std/согласование»), `runs` are workflow runs with
  * `workflow` (null — no access to runs), `usage` is the latest comment with the usage marker.
  */
-export function buildSummary({ now, tz, issues = [], pulls = [], runs = [], usage = null }) {
+export function buildSummary({ now, tz, issues = [], pulls = [], runs = [], usage = null, limitUntil = null }) {
   const { date } = localMinutes(now, tz);
   const [y, mo, d] = date.split('-');
   const plain = issues.filter(i => valid(i) && !i.pull_request && i.state !== 'closed');
   const open = pulls.filter(p => valid(p) && p.state === 'open');
   const line = (kind, item, tail = '') => `- ${kind} ${ref(item)}: ${clean(item.title)}${tail}`;
 
+  const limit = limitLine(limitUntil, date);
   const waiting = [
+    ...(limit ? [limit] : []),
     ...plain.filter(i => hasLabel(i, 'нужен-ответ')).map(i => line('Вопрос', i)),
     ...open.filter(p => hasLabel(p, 'на-согласовании')).map(p => line('PR', p, ` — согласование: ${APPROVAL[p.approval] ?? 'статус неизвестен'}`)),
   ];
@@ -197,7 +220,7 @@ const optional = async (promise, fallback) => {
  * Publishes the summary when it is time. Reads only the default branch (profile) and the API data of issues, PRs and runs.
  * @returns {Promise<{ posted: boolean, reason?: string, body?: string, number?: number, notes: string[] }>}
  */
-export async function run({ api, repo, now = new Date(), force = false, dryRun = false }) {
+export async function run({ api, repo, now = new Date(), force = false, dryRun = false, limitUntil = null }) {
   const notes = [];
   const night = parseNightShift(await readProfile(api, repo));
   let tz = night.tz;
@@ -240,7 +263,7 @@ export async function run({ api, repo, now = new Date(), force = false, dryRun =
     .filter(c => (c.body ?? '').includes(USAGE_MARK))
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0] ?? null;
 
-  const body = buildSummary({ now, tz, issues: items, pulls: [...openPulls, ...closedPulls], runs, usage });
+  const body = buildSummary({ now, tz, issues: items, pulls: [...openPulls, ...closedPulls], runs, usage, limitUntil });
   if (dryRun) return { posted: false, reason: 'пробный запуск: публикация пропущена', body, number: issue.number, notes };
   await api(`repos/${repo}/issues/${issue.number}/comments`, { method: 'POST', body: { body } });
   return { posted: true, body, number: issue.number, notes };
@@ -265,6 +288,7 @@ async function main(argv) {
     const result = await run({
       api: makeApi(token, apiBase(process.env.GITHUB_API_URL)), repo, now,
       force: Boolean(values.force) || process.env.STD_MORNING_FORCE === '1', dryRun: Boolean(values['dry-run']),
+      limitUntil: process.env.INTERACTION_LIMIT_UNTIL,
     });
     for (const note of result.notes) console.log(`Примечание: ${note}`);
     if (result.posted) console.log(`Сводка опубликована в issue #${result.number}`);

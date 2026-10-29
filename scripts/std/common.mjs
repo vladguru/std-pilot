@@ -211,6 +211,13 @@ export function ownerFromAgentsMd(agentsMd) {
   return login && GITHUB_LOGIN.test(login) ? login : null;
 }
 
+/** The account the agent works under (a separate GitHub account); null when the row says «не задана», is empty or is not a login. */
+export function agentFromAgentsMd(agentsMd) {
+  const value = profileRows(agentsMd).get('учётная запись агента');
+  const login = value?.replace(/^@/, '');
+  return login && GITHUB_LOGIN.test(login) ? login : null;
+}
+
 export function fail(lines) {
   for (const line of lines) console.error(line);
   process.exitCode = 1;

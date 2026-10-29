@@ -29,7 +29,7 @@ jobs:
   approval:
     name: Согласование
     if: github.event_name != 'issue_comment' || github.event.issue.pull_request
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '["self-hosted"]') }}
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
