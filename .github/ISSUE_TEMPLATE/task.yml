@@ -1,0 +1,39 @@
+name: Задание
+description: Самодостаточное задание для агента (скилл std-task)
+title: "<кратко: что сделать>"
+labels: ["задание"]
+body:
+  - type: textarea
+    id: content
+    attributes:
+      label: Содержание
+      description: Что нужно сделать и зачем, в одной-двух фразах.
+    validations:
+      required: true
+  - type: textarea
+    id: ac
+    attributes:
+      label: Требования и AC
+      description: Идентификаторы ТР-NN и AC-NN из SPEC.md и имена тестов, которые нужно написать.
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Файлы и интерфейсы
+      description: Какие файлы и модули изменяются, какие изменять нельзя; сигнатуры на границах модулей; образец «выполнить по примеру <путь>».
+  - type: input
+    id: size
+    attributes:
+      label: Ориентир объёма
+      description: Строк прикладного кода без тестов; не больше лимита из AGENTS.md.
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Зависимости
+      description: Номера заданий, которые должны быть закрыты раньше.
+  - type: textarea
+    id: done
+    attributes:
+      label: Критерий готовности
+      description: Проверка из профиля проходит; какие документы обновить.

@@ -1,0 +1,7 @@
+extends: substitution
+message: "Используйте «%s» вместо «%s» (термин проекта из docs/glossary.md)."
+level: error
+ignorecase: true
+swap:
+  # Добавляйте замены проекта в виде: 'неверный термин': верный термин
+  '\b(?:образец-замены-проекта)\b': образец

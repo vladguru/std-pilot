@@ -1,0 +1,7 @@
+extends: existence
+message: "Для русского текста используйте кавычки «ёлочки» вместо «%s»."
+level: warning
+scope: sentence
+nonword: true
+tokens:
+  - '"[А-Яа-яЁё][^"\n]*"'

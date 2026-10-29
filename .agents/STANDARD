@@ -1,6 +1,12 @@
 {
-  "version": "0.1.0",
+  "version": "0.4.0",
   "skills": [
+    "caveman",
+    "dispatching-parallel-agents",
+    "executing-plans",
+    "finishing-a-development-branch",
+    "receiving-code-review",
+    "requesting-code-review",
     "std-accept",
     "std-arbiter",
     "std-architect",
@@ -22,7 +28,14 @@
     "std-run",
     "std-security",
     "std-spec",
-    "std-task"
+    "std-task",
+    "subagent-driven-development",
+    "systematic-debugging",
+    "test-driven-development",
+    "ultracave",
+    "using-git-worktrees",
+    "verification-before-completion",
+    "writing-plans"
   ],
   "agents": [
     "std-accept",
@@ -49,6 +62,7 @@
     "std-security",
     "std-spec",
     "std-task",
+    "std-task-heavy",
     "std-task-high"
   ],
   "mcp": [
@@ -61,5 +75,9 @@
     "render",
     "serena",
     "vercel"
+  ],
+  "packages": [
+    "caveman",
+    "superpowers"
   ]
 }

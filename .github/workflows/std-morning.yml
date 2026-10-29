@@ -1,0 +1,44 @@
+# Утренняя сводка ночной смены (спека, п. 5). Запускается каждые 30 минут и сам решает, пора ли публиковать:
+# время и часовой пояс берёт из профиля AGENTS.md ветки main («Ночная смена»), не более одной сводки в сутки
+# (маркер «std-morning ГГГГ-ММ-ДД» в комментарии). Комментарий публикует github-actions[bot] в issue с меткой «сводки»:
+# так владелец получает уведомление GitHub, даже если агент и владелец работают под одной учётной записью.
+# Файл принадлежит стандарту.
+#
+# Безопасность: рабочий процесс запускается по расписанию из основной ветки, скрипт берётся из scripts/std основной ветки;
+# код веток PR не читается и не выполняется. Из issue и комментариев в сводку попадают только заголовки, номера и ссылки.
+# Права токена: issues: write — комментарий со сводкой; остальные права только на чтение (PR, статусы согласования, запуски CI).
+name: Утренняя сводка
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  statuses: read
+  actions: read
+
+concurrency:
+  group: morning-summary
+  cancel-in-progress: false
+
+jobs:
+  summary:
+    name: Утренняя сводка
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '["self-hosted"]') }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: scripts/std
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: node scripts/std/morning-summary.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STD_MORNING_FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
