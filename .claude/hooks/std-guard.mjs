@@ -23,11 +23,14 @@ const REASONS = {
   history: 'Переписывание истории (filter-branch, filter-repo) запрещено.',
   apiDelete: 'Удаление защиты веток, правил, тегов и самого репозитория через API запрещено. Менять защиту может только владелец.',
   repoDelete: 'Удаление репозитория запрещено. Это решение владельца.',
+  apiWeaken: 'Ослабление защиты веток и правил, смена видимости, архивация и смена основной ветки репозитория запрещены. Это решение владельца.',
+  alias: 'Псевдонимы git (git -c alias.…, git config alias.…) могут скрыть запрещённую команду, поэтому запрещены. Пишите команду git целиком.',
+  tooLong: 'Команда длиннее 100 000 знаков (или вложена слишком глубоко) и содержит опасные операции (push, rm -rf, curl…): разобрать её с уверенностью нельзя. Разбейте её на короткие команды; большие тексты записывайте в файл инструментом Write.',
   pipeShell: 'Выполнение скачанного сценария без просмотра (curl или wget в оболочку, bash -c "$(curl …)") запрещено. Скачайте файл, прочитайте его и запустите отдельно; установку сторонних программ согласуйте с владельцем.',
-  token: 'Вывод токенов и секретов запрещён: значение попадёт в журнал и контекст. Используйте переменную внутри команды (например, в заголовке запроса), но не печатайте её.',
+  token: 'Чтение и вывод токенов и секретов запрещены (переменные окружения, git credential, файлы с ключами): значение попадёт в журнал и контекст. Используйте переменную внутри команды (например, в заголовке запроса), но не печатайте и не читайте её.',
   rm: 'Рекурсивное удаление корня, домашнего или системного каталога запрещено. Удаляйте конкретные каталоги проекта (например, node_modules).',
-  restrictor: 'Запись в .github/workflows/, scripts/std/, .claude/hooks/ и .claude/settings.json командами оболочки запрещена: это ограничители. Менять их можно только через PR с согласием владельца (метка «на-согласовании»).',
-  file: 'Запись в .github/workflows/, scripts/std/, .claude/hooks/ и .claude/settings.json запрещена: это ограничители. Менять их можно только через PR с согласием владельца (метка «на-согласовании»); напомните владельцу об этом в описании PR.',
+  restrictor: 'Запись в .github/workflows/, scripts/std/, .claude/hooks/, .claude/settings.json и .claude/settings.local.json командами оболочки и сценариями запрещена: это ограничители. Менять их можно только через PR с согласием владельца (метка «на-согласовании»).',
+  file: 'Запись в .github/workflows/, scripts/std/, .claude/hooks/, .claude/settings.json и .claude/settings.local.json запрещена: это ограничители. Менять их можно только через PR с согласием владельца (метка «на-согласовании»); напомните владельцу об этом в описании PR.',
 };
 
 // ---- разбор оболочки -------------------------------------------------------------------------------------------------
@@ -258,7 +261,8 @@ const EVAL_FLAGS = new Set(['-c', '-e', '-r', '-p', '--eval', '-E']);
 const SENSITIVE = /(token|secret|passw(or)?d|api_?key|private_?key|credential|auth_?key|access_?key)/i;
 // Переменные с такими окончаниями хранят путь или имя, а не секрет.
 const NOT_SECRET = /_(FILE|PATH|DIR|NAME)$/i;
-const LOOSE_SECRET = /(token|secret|passw|key|credential)/i;
+// Слова после `env |` или `printenv |`, которыми ищут секреты: grep -i tok, pass, key…
+const LOOSE_SECRET = /(tok|secr|pass|key|cred|auth)/i;
 // Файлы, в которых лежат токены и закрытые ключи пользователя (открытые ключи .pub не затронуты).
 const CREDENTIAL_FILES = /(^|\/)(\.config\/gh\/hosts\.yml|\.git-credentials|\.netrc|\.ssh\/id_[a-z0-9_]+)$/i;
 
@@ -329,7 +333,28 @@ function stripPrefix(words) {
   return { words: words.slice(k), assigns };
 }
 
+const shellQuote = text => `'${text.replace(/'/g, `'\\''`)}'`;
+
+// `env -S "git push -f"` (также --split-string, -iS, -S"…" слитно): строка разбирается как команда.
+// Возвращает { value, tail } — строка и остальные слова — либо null.
+function envSplitString(args) {
+  for (let k = 0; k < args.length; k++) {
+    const t = args[k].text;
+    if (t === '--') return null;
+    if (ASSIGN.test(t)) continue;
+    if (!t.startsWith('-') || t === '-') return null; // дальше идёт сама команда
+    if (t === '--split-string') return { value: args[k + 1]?.text ?? '', tail: args.slice(k + 2) };
+    if (t.startsWith('--split-string=')) return { value: t.slice('--split-string='.length), tail: args.slice(k + 1) };
+    if (t.startsWith('--')) continue;
+    const m = /^-[A-Za-z0-9]*S([\s\S]*)$/.exec(t);
+    if (m) return m[1] === '' ? { value: args[k + 1]?.text ?? '', tail: args.slice(k + 2) } : { value: m[1], tail: args.slice(k + 1) };
+    if (['-u', '-C', '-P'].includes(t)) k++;
+  }
+  return null;
+}
+
 // Снимает обёртки (sudo, env, xargs…). Результат: { name, args } либо null, если имя команды неизвестно.
+// Для `env -S` результат — { name: 'env', args: [], split: текст команды }.
 function unwrap(words) {
   let rest = words;
   for (let n = 0; n < 8 && rest.length > 0; n++) {
@@ -337,6 +362,10 @@ function unwrap(words) {
     const name = baseName(rest[0].text);
     const spec = Object.hasOwn(WRAPPERS, name) ? WRAPPERS[name] : null;
     if (spec === null) return { name, args: rest.slice(1) };
+    if (name === 'env') {
+      const split = envSplitString(rest.slice(1));
+      if (split !== null) return { name, args: [], split: [split.value, ...split.tail.map(a => shellQuote(a.text))].join(' ') };
+    }
     if (name === 'command' && rest.slice(1).some(a => /^-[vV]$/.test(a.text))) return null;
     const after = skipWrapper(rest.slice(1), spec);
     if (after.length === 0) return { name, args: [] };
@@ -360,8 +389,15 @@ const PROTECTED = [
   /(^|\/)\.github\/workflows(\/|$)/,
   /(^|\/)scripts\/std(\/|$)/,
   /(^|\/)\.claude\/hooks(\/|$)/,
-  /(^|\/)\.claude\/settings\.json$/,
+  /(^|\/)\.claude\/settings(\.local)?\.json$/, // личные настройки тоже: в них можно записать disableAllHooks или свои хуки
 ];
+
+// Защищённый путь где угодно в тексте: для patch, git apply и сценариев на других языках, которые разобрать нельзя.
+const PROTECTED_TEXT = /\.github[\\/]+workflows|(^|[^\w.-])scripts[\\/]+std([\\/\s"']|$)|\.claude[\\/]+hooks|\.claude[\\/]+settings(\.local)?\.json/i;
+// Признаки того, что сценарий открывает файл на запись, переименовывает, копирует или удаляет его.
+const WRITE_HINT = /open\s*\(|write|append|copy|rename|unlink|remove|rmtree|rmsync|\brm\s|move|truncate|symlink|system|popen|subprocess|exec|spawn|>/i;
+// Чтение переменных окружения в сценарии на другом языке.
+const ENV_READ = /process\.env|os\.environ|getenv|\benviron\b|\bENV\b|\$_ENV|\$_SERVER|Deno\.env|Bun\.env/;
 
 function projectRoot(cwd) {
   if (process.env.CLAUDE_PROJECT_DIR) return process.env.CLAUDE_PROJECT_DIR;
@@ -371,8 +407,14 @@ function projectRoot(cwd) {
   }
 }
 
+const isAbsolute = p => p.startsWith('/') || /^[A-Za-z]:\//.test(p);
+
+// Относительные пути считаются от текущего каталога команды: рабочего или того, в который перешёл cd выше по строке.
 function isProtectedPath(path, ctx) {
-  let n = posix.normalize(path.replace(/\\/g, '/').toLowerCase());
+  let p = path.replace(/\\/g, '/');
+  const base = (ctx.st?.dir ?? ctx.cwd ?? '').replace(/\\/g, '/');
+  if (base !== '' && !isAbsolute(p) && !/^[$~]/.test(p)) p = `${base}/${p}`;
+  let n = posix.normalize(p.toLowerCase());
   const root = ctx.root.replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
   if (root !== '' && n.startsWith(`${root}/`)) n = n.slice(root.length + 1);
   return PROTECTED.some(re => re.test(n));
@@ -400,22 +442,59 @@ function currentBranch(cwd) {
   }
 }
 
+// Каталог после `cd`, `pushd` и `git -C`: пути в команде ниже считаются от него. Неизвестный каталог (переменная,
+// `cd -`, `cd` без аргумента) не меняет ничего: пути проверяются как раньше.
+function changeDir(dir, target) {
+  const t = target.replace(/\\/g, '/');
+  const joined = isAbsolute(t) ? t : `${dir.replace(/\\/g, '/')}/${t}`;
+  return posix.normalize(joined);
+}
+
+function applyCd(args, ctx) {
+  const target = args.find(a => !a.text.startsWith('-') || a.text === '-');
+  if (target === undefined || target.text === '-' || target.sub || target.vars.length > 0 || /^~/.test(target.text)) return;
+  ctx.st.dir = changeDir(ctx.st.dir, target.text);
+}
+
+// Тексты слов, содержимое файла-патча и всё остальное, что может назвать защищённый путь, одной строкой.
+function touchesProtected(texts, ctx) {
+  if (PROTECTED_TEXT.test(ctx.text ?? '')) return true;
+  for (const t of texts) {
+    if (t.startsWith('-') || t === '') continue;
+    try {
+      const file = isAbsolute(t.replace(/\\/g, '/')) ? t : join(ctx.st.dir, t);
+      if (!existsSync(file) || !statSync(file).isFile() || statSync(file).size > 5000000) continue;
+      const header = readFileSync(file, 'utf8').split('\n').filter(l => /^(diff |--- |\+\+\+ |rename |copy |Index: )/.test(l));
+      if (header.some(l => PROTECTED_TEXT.test(l))) return true;
+    } catch {
+      // файл нельзя прочитать: решаем по тексту команды
+    }
+  }
+  return false;
+}
+
 // ---- правила -----------------------------------------------------------------------------------------------------
 
-function gitPush(args) {
+const isAddress = p => /^[a-z][a-z0-9+.-]*:\/\//i.test(p) || /^[\w.-]+@[\w.-]+:/.test(p);
+const isPrefix = (name, full, min) => name.length >= min && full.startsWith(name); // git принимает однозначную приставку
+
+function gitPush(args, ctx, dir) {
   const positional = [];
   let force = false;
   let del = false;
   let mirror = false;
+  let tags = false;
   for (let k = 0; k < args.length; k++) {
     const a = args[k];
     if (a === '--') { positional.push(...args.slice(k + 1)); break; }
     if (a.startsWith('--')) {
-      const name = a.split('=')[0];
-      if (name === '--force' || name === '--force-with-lease' || name === '--force-if-includes') force = true;
-      else if (name === '--delete') del = true;
-      else if (name === '--mirror' || name === '--prune') mirror = true;
-      else if (!a.includes('=') && ['--repo', '--receive-pack', '--exec', '--push-option'].includes(name)) k++;
+      const name = a.slice(2).split('=')[0];
+      if (name === '') continue;
+      if (name.startsWith('f') && ['force', 'force-with-lease', 'force-if-includes'].some(full => full.startsWith(name))) force = true;
+      else if (isPrefix(name, 'delete', 2)) del = true;
+      else if (isPrefix(name, 'mirror', 1) || isPrefix(name, 'prune', 3)) mirror = true;
+      else if (isPrefix(name, 'tags', 3)) tags = true;
+      else if (!a.includes('=') && ['repo', 'receive-pack', 'exec', 'push-option'].some(full => isPrefix(name, full, 3))) k++;
       continue;
     }
     if (a.startsWith('-') && a.length > 1) {
@@ -433,10 +512,17 @@ function gitPush(args) {
   if (del || mirror) return REASONS.deleteRef;
   for (const p of positional) {
     if (p.startsWith('+')) return REASONS.force;
-    if (/^[a-z][a-z0-9+.-]*:\/\//.test(p) || p.includes('@')) continue; // адрес, а не ссылка
+    if (isAddress(p)) continue; // адрес, а не ссылка; `@` и `HEAD@{0}` — ссылки
     if (p.startsWith(':')) return REASONS.deleteRef;
-    const dst = (p.includes(':') ? p.slice(p.lastIndexOf(':') + 1) : p).replace(/^refs\/heads\//, '');
+    const dst = (p.includes(':') ? p.slice(p.lastIndexOf(':') + 1) : p).replace(/^(refs\/)?heads\//, '');
     if (dst === 'main' || dst === 'master') return REASONS.pushMain;
+  }
+  // Без ссылки (или с HEAD и @) уходит текущая ветка. Блокируем, только если она точно main или master.
+  const refspecs = positional.slice(1);
+  const current = refspecs.length === 0 ? !tags : refspecs.some(r => r === 'head' || r === '@');
+  if (current) {
+    const branch = currentBranch(dir);
+    if (branch === 'main' || branch === 'master') return REASONS.pushMain;
   }
   return null;
 }
@@ -464,7 +550,7 @@ function gitReset(args, ctx) {
   if (!args.includes('--hard')) return null;
   const refs = args.filter(a => !a.startsWith('-'));
   if (refs.some(r => /^(refs\/remotes\/)?[^/]+\/(main|master)$/.test(r))) return REASONS.reset;
-  const branch = currentBranch(ctx.cwd);
+  const branch = currentBranch(ctx.st?.dir ?? ctx.cwd);
   if ((branch === 'main' || branch === 'master') && refs.some(r => r.includes('/'))) return REASONS.reset;
   return null;
 }
@@ -492,18 +578,41 @@ function gitBranch(args) {
 
 function checkGit(raw, ctx) {
   let k = 0;
+  let dir = ctx.st?.dir ?? ctx.cwd;
   while (k < raw.length) {
-    const a = lower(raw[k]);
-    if (['-c', '--git-dir', '--work-tree', '--namespace', '--super-prefix', '--config-env'].includes(a)) k += 2;
-    else if (a.startsWith('-')) k++;
+    const a = raw[k];
+    if (a === '-C') { // git -C каталог …
+      if (k + 1 < raw.length) dir = changeDir(dir, raw[k + 1]);
+      k += 2;
+    } else if (a === '-c') { // git -c ключ=значение …
+      if (/^alias\./i.test(raw[k + 1] ?? '')) return REASONS.alias;
+      k += 2;
+    } else if (/^--config-env=alias\./i.test(a)) {
+      return REASONS.alias;
+    } else if (['--git-dir', '--work-tree', '--namespace', '--super-prefix', '--config-env'].includes(lower(a))) {
+      if (lower(a) === '--config-env' && /^alias\./i.test(raw[k + 1] ?? '')) return REASONS.alias;
+      k += 2;
+    } else if (a.startsWith('-')) k++;
     else break;
   }
   if (k >= raw.length) return null;
   const sub = lower(raw[k]);
   const rest = raw.slice(k + 1);
   const low = rest.map(lower);
+  ctx = { ...ctx, st: { dir } }; // пути ниже считаются от каталога git -C
+  const protectedArg = a => !a.startsWith('-') && isProtectedPath(a, ctx);
+  if (sub.startsWith('credential-')) return REASONS.token; // git credential-store, credential-cache, credential-manager
   switch (sub) {
-    case 'push': return gitPush(low);
+    case 'push': return gitPush(low, ctx, dir);
+    case 'checkout':
+    case 'restore': return low.some(protectedArg) ? REASONS.restrictor : null;
+    case 'apply':
+    case 'am': return touchesProtected(rest, ctx) ? REASONS.restrictor : null;
+    case 'credential': return REASONS.token;
+    case 'config': {
+      const plain = rest.filter(a => !a.startsWith('-'));
+      return /^alias\./i.test(plain[0] ?? '') && plain.length >= 2 && /push|force|^!|^-f\b/i.test(plain.slice(1).join(' ')) ? REASONS.alias : null;
+    }
     case 'tag': return gitTag(rest);
     case 'reset': return gitReset(low, ctx);
     case 'branch': return gitBranch(low);
@@ -536,11 +645,44 @@ function hasDeleteMethod(low) {
   });
 }
 
+// Метод запроса: явный (-X, --method, --request) либо подразумеваемый (с телом запроса — POST, иначе GET).
+function httpMethod(low, bodyFlags) {
+  for (let k = 0; k < low.length; k++) {
+    const a = low[k];
+    if (['-x', '--method', '--request'].includes(a)) return low[k + 1] ?? '';
+    const m = /^(?:--method=|--request=|-x)(.+)$/.exec(a);
+    if (m) return m[1];
+  }
+  return low.some(a => bodyFlags.test(a)) ? 'post' : 'get';
+}
+
+const PROTECTION_TARGETS = [
+  /(^|\/)repos\/[^/]+\/[^/]+\/branches\/.+\/protection/,
+  /(^|\/)repos\/[^/]+\/[^/]+\/rulesets(\/|\?|$)/,
+];
+const REPO_FIELDS = /(^|[^a-z_]|^-f)(visibility|private|archived|default_branch)["']?\s*[=:]/;
+
+// Изменение защиты веток и правил, видимости, архивации и основной ветки через gh api или curl.
+function weakensRepo(low, bodyFlags, hasInput) {
+  const method = httpMethod(low, bodyFlags);
+  if (!['put', 'patch', 'post'].includes(method)) return false;
+  if (low.some(a => PROTECTION_TARGETS.some(re => re.test(a)))) return true;
+  if (method === 'patch' && low.some(a => API_TARGETS[0].test(a))) return hasInput || low.some(a => REPO_FIELDS.test(a));
+  return false;
+}
+
+// Параметры с телом запроса: у gh метод по умолчанию становится POST, у curl тоже.
+const GH_BODY = /^(-f|--field|--raw-field|--input)(=|$)|^-f./;
+const CURL_BODY = /^(-d|--data[a-z-]*|--json|-t|--upload-file|--form[a-z-]*)(=|$)/;
+
 function checkGh(raw) {
   const low = raw.map(lower);
   const sub = low.find(a => !a.startsWith('-'));
   if (sub === 'api' && hasDeleteMethod(low) && low.some(a => API_TARGETS.some(re => re.test(a)))) return REASONS.apiDelete;
+  if (sub === 'api' && weakensRepo(low, GH_BODY, low.some(a => a === '--input' || a.startsWith('--input=')))) return REASONS.apiWeaken;
   const k = low.indexOf(sub);
+  if (sub === 'repo' && low[k + 1] === 'archive') return REASONS.apiWeaken;
+  if (sub === 'repo' && low[k + 1] === 'edit' && low.some(a => /^--(visibility|default-branch)(=|$)/.test(a))) return REASONS.apiWeaken;
   if (sub === 'repo' && low[k + 1] === 'delete') return REASONS.repoDelete;
   if (sub === 'release' && low[k + 1] === 'delete' && low.includes('--cleanup-tag')) return REASONS.tag;
   if (sub === 'auth' && (low[k + 1] === 'token' || (low[k + 1] === 'status' && low.some(a => a === '-t' || a === '--show-token')))) return REASONS.token;
@@ -645,6 +787,14 @@ function upstreamScripts(cmd, ctx) {
   return out;
 }
 
+// Текст сценария интерпретатора, если он передан в команде (-c, -e, -p…), here-документом, строкой или конвейером; иначе null.
+function interpreterText(texts, cmd, ctx) {
+  const evalForm = texts.some(t => EVAL_FLAGS.has(t) || /^-[A-Za-z]*[ceE]$/.test(t));
+  const stdinForm = texts.every(t => t.startsWith('-')) && (cmd.heredoc !== null || cmd.hereString !== null || cmd.pipeIn);
+  if (!evalForm && !stdinForm) return null;
+  return [texts.join(' '), cmd.heredoc, cmd.hereString, ...(cmd.pipeIn ? upstreamScripts(cmd, ctx) : [])].filter(Boolean).join('\n');
+}
+
 function upstreamHasDownloader(cmd, ctx) {
   for (const up of ctx.pipeline) {
     if (up === cmd) break;
@@ -655,7 +805,7 @@ function upstreamHasDownloader(cmd, ctx) {
 
 function isDump(call) {
   const flags = call.args.map(a => a.text);
-  if ((call.name === 'env' || call.name === 'printenv') && flags.length === 0) return true;
+  if ((call.name === 'env' || call.name === 'printenv') && flags.every(f => f.startsWith('-'))) return true;
   if (call.name === 'set' && flags.length === 0) return true;
   if (call.name === 'export' && flags.every(f => f === '-p')) return true;
   return (call.name === 'declare' || call.name === 'typeset') && flags.length > 0 && flags.every(f => /^-[xp]+$/.test(f));
@@ -667,9 +817,11 @@ function stringLiterals(text) {
 
 /** Проверяет простую команду; возвращает причину блокировки или null. */
 function checkCall(call, cmd, ctx) {
+  if (call.split !== undefined) return checkScript(call.split, ctx, ctx.depth + 1); // env -S "команда"
   const { name, args } = call;
   const texts = args.map(a => a.text);
   const low = texts.map(lower);
+  if (/^git-credential/.test(name)) return REASONS.token;
 
   // скачанное выполняется без просмотра
   if ((SHELLS.has(name) || name === 'eval' || name === 'source' || name === '.') && args.some(a => a.dl)) return REASONS.pipeShell;
@@ -696,6 +848,7 @@ function checkCall(call, cmd, ctx) {
     }
     case 'curl':
       if (hasDeleteMethod(low) && low.some(a => API_TARGETS.some(re => re.test(a)))) return REASONS.apiDelete;
+      if (weakensRepo(low, CURL_BODY, low.some(a => a.startsWith('@') || /^--data[a-z-]*=@/.test(a)))) return REASONS.apiWeaken;
       break;
     case 'echo':
     case 'printf':
@@ -718,6 +871,14 @@ function checkCall(call, cmd, ctx) {
         else ctx.known.set(key, a.text.slice(m[0].length));
       }
       break;
+    case 'patch':
+      if (touchesProtected(texts, ctx)) return REASONS.restrictor;
+      break;
+    case 'awk':
+    case 'gawk':
+    case 'mawk':
+      if (texts.some(t => /ENVIRON/.test(t) && SENSITIVE.test(t))) return REASONS.token;
+      break;
     case 'find': {
       for (let k = 0; k < texts.length; k++) {
         if (!['-exec', '-execdir', '-ok', '-okdir'].includes(texts[k])) continue;
@@ -739,8 +900,17 @@ function checkCall(call, cmd, ctx) {
 
   if (writtenPaths(name, args).some(p => isProtectedPath(p, ctx))) return REASONS.restrictor;
 
+  // сценарии на других языках (-c, -e, here-документ, конвейер, «-»): читают токены и пишут в ограничители
+  if (INTERPRETERS.test(name)) {
+    const text = interpreterText(texts, cmd, ctx);
+    if (text !== null) {
+      if (ENV_READ.test(text) && SENSITIVE.test(text)) return REASONS.token;
+      if (PROTECTED_TEXT.test(text) && WRITE_HINT.test(text)) return REASONS.restrictor;
+    }
+  }
+
   // вложенные сценарии
-  if (ctx.depth < MAX_DEPTH) {
+  if (ctx.depth <= MAX_DEPTH) {
     const nested = text => checkScript(text, ctx, ctx.depth + 1);
     if (name === 'eval') {
       const r = nested(texts.join(' '));
@@ -792,11 +962,17 @@ function checkCommand(cmd, ctx) {
     return null;
   }
   const call = unwrap(words);
-  return call === null ? null : checkCall(call, cmd, ctx);
+  if (call === null) return null;
+  if (call.name === 'cd' || call.name === 'pushd') applyCd(call.args, ctx); // дальше по строке пути считаются от нового каталога
+  return checkCall(call, cmd, ctx);
 }
 
+// Слова, при которых слишком длинную или слишком глубоко вложенную команду пропустить нельзя.
+const RISKY_TEXT = /\bpush\b|\brm\s+-|\bcurl\b|\bwget\b|\bgh\s+(api|repo)\b|\.github[\\/]+workflows|scripts[\\/]+std|\.claude[\\/]|\bprintenv\b|\bgit\s+(tag|reset|filter|credential)|\/proc\/|\.netrc|\.git-credentials/i;
+
 function checkScript(src, parent, depth) {
-  if (depth > MAX_DEPTH || src.length > MAX_LENGTH) return null;
+  if (depth > MAX_DEPTH || src.length > MAX_LENGTH) return RISKY_TEXT.test(src) ? REASONS.tooLong : null;
+  const st = { dir: (parent.st?.dir ?? parent.cwd).replace(/\\/g, '/') }; // подоболочка: cd внутри не выходит наружу
   const commands = parseShell(src);
   const pipelines = new Map();
   for (const c of commands) {
@@ -805,7 +981,7 @@ function checkScript(src, parent, depth) {
   }
   const known = new Map();
   for (const cmd of commands) {
-    const r = checkCommand(cmd, { cwd: parent.cwd, root: parent.root, known, pipeline: pipelines.get(cmd.pipe), depth });
+    const r = checkCommand(cmd, { cwd: parent.cwd, root: parent.root, known, pipeline: pipelines.get(cmd.pipe), depth, text: src, st });
     if (r) return r;
   }
   return null;

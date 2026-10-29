@@ -11,7 +11,7 @@ name: Согласование
 
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize, labeled, unlabeled]
+    types: [opened, reopened, synchronize, labeled, unlabeled, edited]
   issue_comment:
     types: [created, edited, deleted]
 

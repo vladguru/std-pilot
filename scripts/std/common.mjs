@@ -12,7 +12,7 @@ export const AGENT_MARK = '<!-- agent -->';
 export const RESTRICTOR_PATHS = [
   /^\.github\//,
   /^\.claude\/hooks\//,
-  /^\.claude\/settings\.json$/,
+  /^\.claude\/settings(?:\.local)?\.json$/,
   /^\.gitattributes$/,
   /^Makefile$/,
   /^make\/[^/]+\.mk$/,

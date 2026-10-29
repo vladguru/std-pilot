@@ -10,9 +10,31 @@ import { pathToFileURL } from 'node:url';
 export const CHECK_TIMEOUT_MS = 120000;
 const MAX_MESSAGE = 1500;
 
+// ---- доверие к коду ветки ----------------------------------------------------------------------------------------------
+// Хук запускает make, а Makefile лежит в ветке, которую правит агент. Поэтому запуск разрешён, только если среда
+// доверенная: облако (CLAUDE_CODE_REMOTE), репозиторий без удалённого origin либо ограничители (Makefile, make/,
+// .mise.toml, scripts/std, package.json, pnpm-workspace.yaml, .claude) не отличаются от origin/main.
+const GUARDED_PATHS = ['Makefile', 'make', '.mise.toml', 'scripts/std', 'package.json', 'pnpm-workspace.yaml', '.claude'];
+const GIT_OPTIONS = { encoding: 'utf8', timeout: 15000, windowsHide: true, env: { ...process.env, LC_ALL: 'C' } };
+
+export function isTrusted({ cwd, env = process.env }) {
+  if (env.CLAUDE_CODE_REMOTE) return true;
+  const git = args => spawnSync('git', args, { cwd, ...GIT_OPTIONS });
+  const origin = git(['config', '--get', 'remote.origin.url']);
+  if (origin.error) return false;
+  if (origin.status === 1) return true; // удалённого origin нет
+  if (origin.status === 128 && /not a git repository/i.test(origin.stderr ?? '')) return true; // это не репозиторий
+  if (origin.status !== 0) return false;
+  if (git(['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/main']).status !== 0) return false;
+  if (git(['diff', '--quiet', '--no-ext-diff', '--no-textconv', 'refs/remotes/origin/main', '--', ...GUARDED_PATHS]).status !== 0) return false;
+  // Новый файл (например, make/evil.mk) подхватывается Makefile, а git diff его не видит.
+  const fresh = git(['ls-files', '--others', '--exclude-standard', '--', ...GUARDED_PATHS, ':(exclude).claude/settings.local.json']);
+  return fresh.status === 0 && (fresh.stdout ?? '').trim() === '';
+}
+
 function hasTarget(cwd) {
   try {
-    return /^check-std:/m.test(readFileSync(join(cwd, 'Makefile'), 'utf8'));
+    return readFileSync(join(cwd, 'Makefile'), 'utf8').split('\n').some(line => line.startsWith('check-std:'));
   } catch {
     return false;
   }
@@ -38,11 +60,14 @@ function tail(text) {
 }
 
 /** @returns {{ block: boolean, message?: string }} */
-export function runStop({ input, cwd, spawnSync: run = spawnSync }) {
+export function runStop({ input, cwd, spawnSync: run = spawnSync, env = process.env }) {
   if (input?.stop_hook_active === true) return { block: false };
   if (!hasTarget(cwd)) return { block: false };
   const files = changedFiles(cwd, run);
   if (files.length === 0) return { block: false };
+  if (!isTrusted({ cwd, env })) {
+    return { block: false, skipped: 'std-stop: make check-std пропущен: ограничители (Makefile, make/, scripts/std, .claude и другие) отличаются от origin/main либо origin/main недоступен, код ветки не считается доверенным. Проверьте изменения и запустите make check-std вручную.' };
+  }
   const result = run('make', ['check-std'], {
     cwd,
     encoding: 'utf8',
@@ -65,7 +90,10 @@ function main() {
   if (typeof input !== 'object' || input === null) return 0;
   const cwd = process.env.CLAUDE_PROJECT_DIR || (typeof input.cwd === 'string' && input.cwd) || process.cwd();
   const result = runStop({ input, cwd });
-  if (!result.block) return 0;
+  if (!result.block) {
+    if (result.skipped) process.stderr.write(`${result.skipped}\n`); // не блокирует: код выхода 0
+    return 0;
+  }
   process.stderr.write(`${result.message}\n`);
   return 2;
 }

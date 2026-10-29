@@ -51,7 +51,7 @@ jobs:
       # Проверки запускаются из основной ветки: PR не может ослабить сами проверки.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.base_ref }}
+          ref: ${{ github.event.repository.default_branch }}
           path: .std-base
           sparse-checkout: scripts/std
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -60,7 +60,7 @@ jobs:
       - name: Защита ограничителей
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          BASE_REF: ${{ github.base_ref }}
+          BASE_REF: ${{ github.event.repository.default_branch }}
         run: |
           if [ -f .std-base/scripts/std/guard.mjs ]; then
             node .std-base/scripts/std/guard.mjs --report --base "origin/$BASE_REF"
@@ -70,7 +70,7 @@ jobs:
       - name: Обязательность документов
         if: ${{ !cancelled() }}
         env:
-          BASE_REF: ${{ github.base_ref }}
+          BASE_REF: ${{ github.event.repository.default_branch }}
         run: |
           if [ -f .std-base/scripts/std/docs-required.mjs ]; then
             node .std-base/scripts/std/docs-required.mjs --base "origin/$BASE_REF" --event "$GITHUB_EVENT_PATH"

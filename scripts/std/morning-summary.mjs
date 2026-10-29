@@ -23,7 +23,7 @@ const WORKFLOWS = [['std-nightly', 'Ночной прогон'], ['std-ci', 'CI 
 const RUN_STATES = { success: 'успешно', failure: 'ошибка', cancelled: 'отменён', timed_out: 'превышено время', skipped: 'пропущен', action_required: 'требует действия' };
 const APPROVAL = { success: 'пройдено', failure: 'ожидает одобрения', pending: 'проверяется' };
 const LINK = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/(?:issues|pull|actions\/runs)\/\d+$/;
-const BIDI = /[​-‏‪-‮⁠-⁩﻿]/g;
+const BIDI = /[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g;
 
 function parts(now, tz) {
   if (!isTimeZone(tz)) throw new Error(`неизвестный часовой пояс: ${tz}`);
@@ -64,7 +64,7 @@ function clean(title) {
     .replace(/[\\`*_[\]()<>#|~&!]/g, '\\$&')
     .replace(/:\/\//g, '\\:\\/\\/')
     .replace(/www\./gi, 'www\\.')
-    .replace(/@/g, '@​');
+    .replace(/@/g, '@\u200B');
 }
 
 const names = item => (item.labels ?? []).map(l => (typeof l === 'string' ? l : l?.name));
@@ -79,10 +79,20 @@ function limited(lines) {
 }
 
 function pickNumber(body, label, max) {
-  const m = new RegExp(`^[ \\t>*+-]*${label}[ \\t]*:[ \\t]*(\\d[\\d \\u00a0\\u202f_]*)`, 'mi').exec(body);
-  if (!m) return null;
-  const n = Number(m[1].replace(/\D/g, ''));
-  return Number.isSafeInteger(n) && n <= max ? n : null;
+  // Без динамического RegExp: строка вида «- Метка: 123» после необязательных маркеров списка.
+  const wanted = label.toLowerCase();
+  for (const raw of body.split('\n')) {
+    const line = raw.replace(/^[ \t>*+-]+/, '').toLowerCase();
+    if (!line.startsWith(wanted)) continue;
+    const afterLabel = line.slice(wanted.length);
+    const rest = afterLabel.replace(/^[ \t]*:[ \t]*/, '');
+    if (rest === afterLabel) continue; // нет двоеточия
+    const m = /^\d[\d   _]*/.exec(rest);
+    if (!m) continue;
+    const n = Number(m[0].replace(/\D/g, ''));
+    return Number.isSafeInteger(n) && n <= max ? n : null;
+  }
+  return null;
 }
 
 /** Numbers of the usage comment of the night session; free text of the comment never reaches the summary. */

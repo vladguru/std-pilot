@@ -126,7 +126,12 @@ async function load(api, repo, number) {
 /** Loads the PR from GitHub and evaluates it; with postStatus publishes the commit status `std/согласование`. */
 export async function run({ api, repo, number, postStatus = false }) {
   const { pr, owner, files, reviews, commits, comments, suites } = await load(api, repo, number);
-  const result = evaluate({ labels: pr.labels.map(l => l.name), headSha: pr.head.sha, owner, reviews, comments, commits, suites, files: filesFromApi(files), changedFiles: pr.changed_files });
+  // Список файлов PR строится относительно его базы: при базе, отличной от основной ветки, он скрывает изменения ограничителей.
+  const defaultBranch = pr.base?.repo?.default_branch;
+  const baseOk = !defaultBranch || pr.base?.ref === defaultBranch;
+  const result = !baseOk
+    ? { required: true, approved: false, ok: false, reason: `PR направлен в ветку «${pr.base.ref}», а не в основную «${defaultBranch}»: согласование действует только для PR в основную ветку` }
+    : evaluate({ labels: pr.labels.map(l => l.name), headSha: pr.head.sha, owner, reviews, comments, commits, suites, files: filesFromApi(files), changedFiles: pr.changed_files });
   if (postStatus) {
     await api(`repos/${repo}/statuses/${pr.head.sha}`, { method: 'POST', body: { state: result.ok ? 'success' : 'failure', context: STATUS_CONTEXT, description: result.reason.slice(0, 140) } });
   }
