@@ -77,8 +77,10 @@ export function evaluate({ labels, headSha, owner, reviews, comments, commits, s
   const needsLabel = !labels.includes(LABEL_APPROVAL);
   const how = ownerApproval({ owner, headSha, reviews, comments, commits, suites });
   const list = reasons.slice(0, 5).join('; ');
+  // Без наборов проверок неизвестно, когда GitHub увидел коммит, и комментарий не принимается: подсказываем причину.
+  const hint = suites.length === 0 ? '; время появления коммита на GitHub не получено — проверьте право checks: read у рабочего процесса' : '';
   if (needsLabel) return { required, approved: Boolean(how), ok: false, reason: `PR требует согласования (${list}): поставьте метку «${LABEL_APPROVAL}»` };
-  if (!how) return { required, approved: false, ok: false, reason: `ждём одобрения владельца ${owner} (${list}): ревью Approve на последнем коммите или комментарий «согласовано» после него` };
+  if (!how) return { required, approved: false, ok: false, reason: `ждём одобрения владельца ${owner} (${list}): ревью Approve на последнем коммите или комментарий «согласовано» после него${hint}` };
   return { required, approved: true, ok: true, reason: `одобрено владельцем: ${how}` };
 }
 
