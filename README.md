@@ -29,3 +29,5 @@
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — устройство системы.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — порядок работы с репозиторием.
 - [`docs/overview.md`](docs/overview.md) — общее описание системы.
+
+проба probe/p5-prot-d
