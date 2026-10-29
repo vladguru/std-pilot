@@ -1,0 +1,24 @@
+# Пробный файл плана 5: комментарий от другого автора (github-actions[bot]). Удаляется после проверки.
+name: Проба комментария
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        required: true
+      text:
+        required: true
+permissions:
+  issues: write
+  pull-requests: write
+jobs:
+  comment:
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '["self-hosted"]') }}
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+          TEXT: ${{ inputs.text }}
+          REPO: ${{ github.repository }}
+        run: |
+          curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/issues/$PR/comments" -d "$(printf '{"body":%s}' "$(printf '%s' "$TEXT" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>process.stdout.write(JSON.stringify(d)))')")"
